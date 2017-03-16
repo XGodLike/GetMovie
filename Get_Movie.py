@@ -4,7 +4,13 @@ import re
 import urllib2
 from bs4 import BeautifulSoup
 import string,time
-import pymongo
+from pymongo import MongoClient
+
+#/movie?subtype=100008&offset=150
+
+Offset='&offset='
+Subtype='subtype='
+URL='http://v.qq.com/x/list/movie'
 
 NUM=0
 m_type = u''
@@ -19,68 +25,75 @@ def getHtml(url):
 def getTags(html):
 	global m_type
 	soup = BeautifulSoup(html)
-	#tags_all = soup.find_all('ur',{'class':'clearfix _group','gname':'mi_type'})
       	tags_all = soup.find_all('div',{'class' : 'filter_content'})
-
-	#re_tags = r'<a _hot=\"tag\.sub\" class=\"_gtag _hotkey\" href=\"(.+?)\" title=\"(.+?)\" tvalue=\"(.+?)\">.+?</a>'
-	re_tags = r'<a href=\">'
+	re_tags = r'<a _stat=\"filter:params_类型_(.+?)\" class=\"item.*?\" href=\"\?offset=0&amp;subtype=(.+?)\">(.+?)</a>'
 	p = re.compile(re_tags, re.DOTALL)
 	tags = p.findall(str(tags_all[0])) 
+
+	#for tag in tags[1:]:
+	#	print tag[0].decode('utf-8'),tag[1].decode('utf-8')
+	#return tags
+	tags_url = {}
 	if tags:
-		tags_url = {}
-		for tag in tags:   
-			tag_url = tag[0].decode('utf-8')   #print tag_url   
-			m_type = tag[1].decode('utf-8')   
+		for tag in tags[1:]:   
+			tag_url = URL + '?subtype='+ tag[1].decode('utf-8') +'&offset=0' #print tag_url   
+			m_type = tag[2].decode('utf-8')   
 			tags_url[m_type] = tag_url      
 	else:   
 		print "Not Find" 
 	return tags_url
 
 def get_pages(tag_url):
-	tag_html = gethtml(tag_url)
+	tag_html = getHtml(tag_url)
 	soup = BeautifulSoup(tag_html)
-	div_page = soup.find_all('div', {'class' : 'mod_pagenav', 'id' : 'pager'})
-	re_pages =  r'<a class=.+?><span>(.+?)</span></a>'
+	div_page = soup.find_all('div', {'class' : 'mod_pages', 'r-notemplate' : 'true'})
+	re_pages = r'<a _stat=\"pages_index:paging_page_\d{1,}\" class=\"page_num\" href=\".+?\">(\d{1,})</a>'
 	p = re.compile(re_pages,re.DOTALL)
 	pages = p.findall(str(div_page[0]))
-	if len(pages) > 1:
-		return pages[-2]
+	if len(pages) >= 1:	
+		return pages[-1]
 	else:
 		return 1
-
-def getMovielist(html):
-	soup = BeautifulSoup(html)
-	divs = soup.find_all('ul', {'class' : 'mod_list_pic_130'})
-	for div_html in divs:
-		div_html = str(div_html).replace('\n','')
-		getMovie(div_html)
 
 def getMoive(html):
 	global NUM
 	global m_type
 	global m_site
-	
-	re_movie = r'<li><a class=\"mod_poster_130\" href=\"(.+?)\" target=\"_blank\" title=\"(.+?)\"><img.+?</li>'
+
+	re_movie = r'<a _stat=\"videos-vert:title\" href=\"(.*?)\" target=\"_blank\" title=\".*?\">(.*?)</a>'
 	p = re.compile(re_movie,re.DOTALL)
-	movies  = p.find_all(html)
+	movies  = p.findall(html)
 	if movies:
-		conn = pymongo.Connection('localhost',27017)
-		movie_db = conn.dianying
-		playlinks = movie_db.playlinks
+		#conn = pymongo.Connection('localhost',27017)
+		#movie_db = conn.dianying
+		#playlinks = movie_db.playlinks
+		client = MongoClient('localhost',27017)
+		MovieDB=client['Movie']
+		MovieInfo=MovieDB['movie_list']
 		for movie in movies:
 			NUM += 1
 			print "%s:%d" % ('='*70,NUM)
 			values = dict(
+				#movie_title = movie[1],
+				#movie_url = movie[0],
+				#movie_site = m_site,
+				#movie_type = m_type)
 				movie_title = movie[1],
 				movie_url = movie[0],
 				movie_site = m_site,
 				movie_type = m_type)
-
 			print values
-			playlinks.insert(values)
+			MovieInfo.insert(values)
 			print '_'*70
 			NUM += 1
 			print '%s:%d' % ('='*70,NUM)
+
+def getMovielist(html):
+	soup = BeautifulSoup(html)
+	divs = soup.find_all('li', {'class' : 'list_item'})
+	for div_html in divs:
+		#div_html = str(div_html).replace('\n','')
+		getMoive(str(div_html))
 
 def getMovieInfo(url):
 	html = getHtml(url)
@@ -106,19 +119,16 @@ def insertDB(movieinfo):
 
 if __name__ == "__main__":
 	global conn
-	tags_url = "http://v.qq.com/list/1_-1_-1_-1_1_0_0_20_0_-1_0.html"
+	tags_url = URL
 	tags_html = getHtml(tags_url)
 	tag_urls = getTags(tags_html)
-	
 	for url in tag_urls.items():
-		print str(url[1]).encode('utf-8')
+		#print str(url[1]).encode('utf-8')
 		maxpage = int(get_pages(str(url[1]).encode('utf-8')))
-		print maxpage
 		for x in range(0,maxpage):
-			m_url = str(url[1]).replace('0_20_0_-1_0.html','')
-			movie_url = "%s%d_20_0_-1_0.html" % (m_url,x)
-			print movie_url
-			movie_url = getHtml(movie_url.encode('utf-8'))
+			m_url = str(url[1]).replace(Offset,'')
+			movie_url = '%s%s%d' % (m_url,Offset,x*30) 
+			movie_html = getHtml(movie_url.encode('utf-8'))
 			getMovielist(movie_html)
 			time.sleep(0.1)
 
