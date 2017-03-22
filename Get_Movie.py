@@ -165,6 +165,7 @@ def getMovieActors(html):
 def getMovieInfo(html):
 	global NUM
 	global m_type	
+	global m_site
 
 	soup = BeautifulSoup(html,'lxml')
 	divs = soup.find_all('li', {'class' : 'list_item'})
