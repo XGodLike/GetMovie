@@ -78,7 +78,7 @@ def getHtmlWithHead(url):
 	req_header={'User-Agent':'Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome',
 	'Accept':'text/html;1=0.9,*/*;q=0.8',
 	'Accept-Charset':'utf-8',
-	#'Accept-Encoding':'*',
+	'Accept-Encoding':'*',
 	'Connection':'close',
 	'Referer':None
 	}
